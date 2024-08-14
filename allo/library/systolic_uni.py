@@ -128,4 +128,3 @@ def systolic_uni[
                 # else:
                 #     B[ri * Rt + r, ci * Ct + c] = local_S[r, c] # *
                     
-

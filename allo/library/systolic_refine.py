@@ -182,4 +182,3 @@ def systolic_os[
         
         for cm, cn in dsl.grid(Mt, Nt, name="store_C"):
             C[mi * Mt + cm, ni * Nt + cn] = local_C[cm, cn]
-
