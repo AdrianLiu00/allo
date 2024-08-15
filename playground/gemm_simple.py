@@ -38,23 +38,6 @@ def test_gemm_simple():
     from allo.library.systolic_uni import systolic_uni
 
     # =================================================================
-    # A = 128
-    # B = 768
-    # C = 3072
-    # B0 = 16
-    # C0 = 32
-
-    # A = 32
-    # B = 768
-    # C = 64
-    # B0 = 16
-    # C0 = 32
-
-    # A = 6
-    # B = 4
-    # C = 8
-    # B0 = 2
-    # C0 = 4
 
     M0 = 128
     K0 = 768
@@ -81,16 +64,12 @@ def test_gemm_simple():
     # W_A_cst = np.array([[1, 1, 1, 1],
     #                    [1, 1, 1, 1]]).astype(np.int8)
 
+    flowtag: bool = True
+
     # =================================================================
-    # def top[Ty](X: "Ty[A, B]", W_A: "Ty[B, C]") -> "Ty[A, C]":
-    #     Z: Ty[A, C]
-    #     systolic_ws[int8, int8, int8, A, B, C, B0, C0](X, W_A, Z)
-    #     # systolic_os[int8, int8, int8, A, B, C, B0, C0](X, W_A, Z)
-    #     return Z
     
-    def top[Ty](X: "Ty[M0, K0]", W_A: "Ty[K0, N0]") -> "Ty[M0, N0]":
+    def top[Ty](X: "Ty[M0, K0]", W_A: "Ty[K0, N0]", flowtag: bool) -> "Ty[M0, N0]":
         Z: Ty[M0, N0]
-        flowtag: bool = False
         systolic_uni[int8, M0, K0, N0, Rt0, Ct0](X, W_A, Z, flowtag)
         # systolic_ws[int8, int8, int8, M0, K0, N0, Rt0, Ct0](X, W_A, Z)
         # systolic_os[int8, int8, int8, M0, K0, N0, Rt0, Ct0](X, W_A, Z)
@@ -107,7 +86,7 @@ def test_gemm_simple():
     
     mod = s_top.build()
 
-    allo_C = mod(X, W_A_cst)
+    allo_C = mod(X, W_A_cst, flowtag)
     np_C = X @ W_A_cst
 
     print(np_C)
