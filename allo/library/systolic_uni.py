@@ -119,12 +119,12 @@ def systolic_uni[
 
 
             for r, c in dsl.grid(Rt, Ct, name="store_tile"):
-                if not flowtag:
-                    B[ri * Rt + r, ci * Ct + c] = local_S[r, c] # *
-                else:
-                    C[ri * Rt + r, ci * Ct + c] = local_S[r, c]
-                # if flowtag:
-                #     C[ri * Rt + r, ci * Ct + c] = local_S[r, c]
-                # else:
+                # if not flowtag:
                 #     B[ri * Rt + r, ci * Ct + c] = local_S[r, c] # *
+                # else:
+                #     C[ri * Rt + r, ci * Ct + c] = local_S[r, c]
+                if flowtag:
+                    C[ri * Rt + r, ci * Ct + c] = local_S[r, c]
+                else:
+                    B[ri * Rt + r, ci * Ct + c] = local_S[r, c] # *
                     
