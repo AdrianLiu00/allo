@@ -77,7 +77,7 @@ def test_gemm_simple():
     
     s_top = allo.customize(top, instantiate=[allo_type])
 
-    # if A < 20:
+    # if Rt0 < 20:
     #     with open(f'systolic_{date}.mlir', 'w') as f:
     #         print(s_top.module, file=f)
     
@@ -89,14 +89,29 @@ def test_gemm_simple():
     allo_C = mod(X, W_A_cst, flowtag)
     np_C = X @ W_A_cst
 
-    print(np_C)
-    print(allo_C)
+    # print(np_C)
+    # print(allo_C)
 
     np.testing.assert_allclose(allo_C, np_C, atol=1e-3)
     print("Passed!")
 
     # =================================================================
     # # HLS Testing
+
+    # ---------------------------------------
+    # Scheduling
+    tile_name = "systolic_tile_uni"
+
+    # ---------------------------------------
+    # code = s_top.build(target="vhls")
+    # if Rt0 < 20:
+    #     with open(f'systolicHLS_{date}.cpp', 'w') as f:
+    #         print(code, file=f)
+
+    # ---------------------------------------
+    mod_v = s_top.build(target="vhls", mode='csyn', project=f"gemm_{date}.prj")
+    mod_v()
+
     # s_top.compose(
     #     systolic, instantiate=[int32, int32, int32, L, D, 4 * D, M0, M1]
     # )
