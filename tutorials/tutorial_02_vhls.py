@@ -132,7 +132,7 @@ print(code)
 # and ``impl``), and the target project folder name. Allo will automatically generate
 # the HLS project and invoke the compiler to generate the RTL design.
 
-# mod = s.build(target="vhls", mode="csyn", project="gemm.prj")
+mod = s.build(target="vhls", mode="csyn", project="gemm.prj")
 
 # %%
 # You will see a ``gemm.prj`` folder is generated in the current directory:
@@ -152,7 +152,7 @@ print(code)
 #
 # .. code-block:: python
 #
-# mod()
+#    mod()
 
 # %%
 # After executing the above command, you will see the following output:
