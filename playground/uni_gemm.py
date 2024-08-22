@@ -58,8 +58,8 @@ def test_tile():
 
     tile_name = "systolic_tile_uni"
     pe = s_tile.unfold(f"{tile_name}:PE", [0, 1])
-    # s_top.to(MockBuffer(systolic_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
-    # s_top.to(MockBuffer(systolic_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
+    s_tile.to(MockBuffer(tile_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
+    s_tile.to(MockBuffer(tile_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
 
     code = s_tile.build(target="vhls")
     with open(f'tileHLS_{date}.cpp', 'w') as f:
@@ -111,9 +111,15 @@ def test_gemm():
         # systolic_os[int8, int8, int8, M0, K0, N0, Rt0, Ct0](X, W_A, Z)
         return Z
     
+    def top_ori[Ty](X: "Ty[M0, K0]", W_A: "Ty[K0, N0]", flowtag: bool) -> "Ty[M0, N0]":
+        Z: Ty[M0, N0]
+        systolic[int8, int8, int8, M0, K0, N0, Rt0, Ct0](X, W_A, Z)
+        return Z
+    
     # s_uni = allo.customize(systolic_uni, instantiate=[int8, M0, K0, N0, Rt0, Ct0])
     # s_uni.unfold()
     s_top = allo.customize(top, instantiate=[allo_type])
+    s_ori = allo.customize(top_ori, instantiate=[allo_type])
     # s_top.compose(s_uni)
 
     # if Rt0 < 20:
@@ -126,13 +132,15 @@ def test_gemm():
     mod = s_top.build()
 
     allo_C = mod(X, W_A_cst, flowtag)
+    allo_C_ori = mod(X, W_A_cst, flowtag)
     np_C = X @ W_A_cst
 
     # print(np_C)
     # print(allo_C)
 
     np.testing.assert_allclose(allo_C, np_C, atol=1e-3)
-    print("Passed!")
+    np.testing.assert_allclose(allo_C_ori, np_C, atol=1e-3)
+    print("Passed Functionailty Test on CPU!")
 
     # =================================================================
     # # HLS Testing
@@ -145,57 +153,46 @@ def test_gemm():
     # s_top.partition(s_top.R_buf, dim=1)
 
     pe = s_top.unfold(f"{tile_name}:PE", [0, 1])
-    s_top.to(MockBuffer(systolic_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
-    s_top.to(MockBuffer(systolic_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
+    # s_top.to(MockBuffer(systolic_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
+    # s_top.to(MockBuffer(systolic_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
 
     # s_top.to(MockBuffer(tile_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
     # s_top.to(MockBuffer(tile_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
 
 
     # ---------------------------------------
-    code = s_top.build(target="vhls")
-    if Rt0 < 20:
-        with open(f'systolicHLS_{date}.cpp', 'w') as f:
-            print(code, file=f)
+    # code = s_top.build(target="vhls")
+    # if Rt0 < 20:
+    #     with open(f'systolicHLS_{date}.cpp', 'w') as f:
+    #         print(code, file=f)
 
     # ---------------------------------------
     # mod_v = s_top.build(target="vhls", mode='csyn', project=f"gemm_{date}.prj")
     # mod_v()
 
+    # s_ori.compose(systolic, instantiate=[int8, int8, int8, M0, K0, N0, Rt0, Ct0])
+    # s_ori.dataflow("top_ori")
+    # mod_v_ori = s_ori.build(target="vhls", mode='csyn', project=f"gemm_ori_{date}.prj")
+    # mod_v_ori()
+
     # s_top.compose(
     #     systolic, instantiate=[int32, int32, int32, L, D, 4 * D, M0, M1]
     # )
     # s_top.dataflow("top")  # important
+    
     # if hls.is_available("vitis_hls"):
-    #     hls_mod = s_top.build(
-    #         target="vitis_hls",
-    #         mode="csim",
-    #         project=f"simple_{L}x{D}_tile_{M0}x{M1}_csim.prj",
-    #         configs={
-    #             "mappings": [
-    #                 (
-    #                     (L // M0, D, M0),
-    #                     f"(d0 * {M0} + d2) * {D} + d1",
-    #                     f"d0 * {M0} + d2, d1",
-    #                 ),
-    #                 (
-    #                     (L // M0, 4 * D // M1, D, M1),
-    #                     f"d2 * {4 * D} + d1 * {M1} + d3",
-    #                     f"d2, d1 * {M1} + d3",  # does not matter a lot in FIFO
-    #                 ),
-    #                 (
-    #                     (L // M0, 4 * D // M1, M1, M0),
-    #                     f"d0 * {M0} + d3, d1 * {M1} + d2",  # does not matter a lot in FIFO
-    #                     f"(d0 * {M0} + d3) * {4 * D} + d1 * {M1} + d2",
-    #                 ),
-    #             ]
-    #         },
-    #     )
-    #     # Be careful about the NumPy type
-    #     csim_C = np.zeros((L, 4 * D), dtype=np_type)
-    #     hls_mod(packed_X, W_A_packed, csim_C)
-    #     np.testing.assert_allclose(csim_C, allo_C, atol=1e-3)
-    #     print("Passed!")
+    if hls.is_available("vitis_hls"):
+        hls_mod = s_top.build(
+            target="vitis_hls",
+            mode="csim",
+            project=f"gemm_csim_{date}.prj"
+        )
+
+        # Be careful about the NumPy type
+        csim_C = np.zeros((M0, N0), dtype=np_type)
+        hls_mod(X, W_A_cst, flowtag, csim_C)
+        np.testing.assert_allclose(csim_C, allo_C, atol=1e-3)
+        print("Passed Functionailty Test on FPGA!")
 
     return
 
@@ -203,5 +200,5 @@ def test_gemm():
 
 if __name__ == '__main__':
     # test_PE_simple()
-    test_tile()
-    # test_gemm()
+    # test_tile()
+    test_gemm()

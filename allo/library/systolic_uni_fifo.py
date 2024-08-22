@@ -15,44 +15,37 @@ def PE_kernel_uni[
     i: index,
     j: index,
 
-    # R_in: "Ty",
-    # C_in: "Ty",
-    # R_out: "Ty",
-    # C_out: "Ty",
-
-    R_buf: "Ty[Rt, Ct+1]",
-    C_buf: "Ty[Rt+1, Ct]",
+    R_in: "Ty",
+    C_in: "Ty",
+    R_out: "Ty[2]",
+    C_out: "Ty[2]",
 
     flowtag: bool
 ):
     s: Ty = S[i, j]
-    r: Ty = R_buf[i, j]
-    c: Ty = C_buf[i, j]
+    r: Ty = R_in
+    c: Ty = C_in
 
     acti: Ty = r
     weight: Ty = c if flowtag else s
     psum: Ty = s if flowtag else c
     accu: Ty = acti * weight + psum
 
-    R_buf[i, j+1] = r
-    C_buf[i+1, j] = c if flowtag else accu
+    R_out[0] = r
+    C_out[0] = c if flowtag else accu
     S[i, j] = accu if flowtag else s
 
 
 def systolic_tile_uni[
     Ty, Rt: int32, Ct: int32
-](S: "Ty[Rt, Ct]", R_buf: "Ty[Rt, Ct+1]", C_buf: "Ty[Rt+1, Ct]", flowtag: bool):
+](S: "Ty[Rt, Ct]", R_buf: "Ty[Rt, Ct+1, 2]", C_buf: "Ty[Rt+1, Ct, 2]", flowtag: bool):
     
     for i, j in dsl.grid(Rt, Ct, name='PE'):
         i0: index = Rt-1-i
         j0: index = Ct-1-j
 
-        # PE_kernel_uni[Ty, Rt, Ct](
-        #     S, i0, j0, R_buf[i0, j0], C_buf[i0, j0], R_buf[Rt-1-i, Ct-1-j+1], C_buf[Rt-1-i+1, Ct-1-j], flowtag
-        # )
-
         PE_kernel_uni[Ty, Rt, Ct](
-            S, i0, j0, R_buf, C_buf, flowtag
+            S, i0, j0, R_buf[i0, j0, 0], C_buf[i0, j0, 0], R_buf[Rt-1-i, Ct-1-j+1], C_buf[Rt-1-i+1, Ct-1-j], flowtag
         )
 
 
@@ -65,8 +58,8 @@ def systolic_uni[
     local_S: Ty[Rt, Ct]
 
     # -------------- Tile Level --------------
-    R_buf: Ty[Rt, Ct+1]
-    C_buf: Ty[Rt+1, Ct]
+    R_buf: Ty[Rt, Ct+1, 2]
+    C_buf: Ty[Rt+1, Ct, 2]
     C_drain: Ty
 
 
@@ -89,22 +82,22 @@ def systolic_uni[
         # -------------- Tile Level --------------
             for r, c in dsl.grid(Rt, Ct, name="initial_tile"):
                 local_S[r, c] = 0 if flowtag else B[ri * Rt + r, ci * Ct + c]
-                R_buf[r, c] = 0 # *
-                C_buf[r, c] = 0 # *
+                R_buf[r, c, 0] = 0 # *
+                C_buf[r, c, 0] = 0 # *
 
             for t in range(Tcycles, name="temporal"):
                 # organize the input data shape
                 for rl in range(Rt, name="load_R"):
                     if t >= rl and t < rl + Tlength:
-                        R_buf[rl, 0] = A[ri*Rt+rl, t-rl] if flowtag else A[t-rl, ri*Rt+rl]
+                        R_buf[rl, 0, 0] = A[ri*Rt+rl, t-rl] if flowtag else A[t-rl, ri*Rt+rl]
                     else:
-                        R_buf[rl, 0] = R_zero
+                        R_buf[rl, 0, 0] = R_zero
                 
                 for cl in range(Ct, name="load_C"):
                     if t >= cl and t < Tlength + cl:
-                        C_buf[0, cl] = B[t-cl, ci*Ct+cl] if flowtag else C[t-cl, ci*Ct+cl]
+                        C_buf[0, cl, 0] = B[t-cl, ci*Ct+cl] if flowtag else C[t-cl, ci*Ct+cl]
                     else:
-                        C_buf[0, cl] = C_zero
+                        C_buf[0, cl, 0] = C_zero
                 
                 systolic_tile_uni[Ty, Rt, Ct](
                     local_S,
@@ -120,9 +113,9 @@ def systolic_uni[
                         # else:
                         #     C_drain = C_buf[Rt, cd, 0] # *
                         if flowtag:
-                            C_drain = C_buf[Rt, cd] # *
+                            C_drain = C_buf[Rt, cd, 0] # *
                         else:
-                            C[t-(Rt-1+cd), ci*Ct+cd] = C_buf[Rt, cd]
+                            C[t-(Rt-1+cd), ci*Ct+cd] = C_buf[Rt, cd, 0]
 
 
             for r, c in dsl.grid(Rt, Ct, name="store_tile"):
