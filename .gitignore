@@ -18,6 +18,11 @@ out
 rapidjson
 project_*
 
+# Temporary Files during Development
+playground/*.cpp
+playground/*.mlir
+tutorials/*
+
 # Downloaded files
 *.params
 *.gz

@@ -71,7 +71,7 @@ def test_tile():
 def test_gemm():
     from allo.library.systolic import systolic
     from allo.library.systolic_refine import systolic_ws, systolic_os
-    from allo.library.systolic_uni import systolic_uni
+    from allo.library.systolic_uni_workaround import systolic_uni
 
     # =================================================================
 
@@ -87,6 +87,12 @@ def test_gemm():
     Rt0 = 4
     Ct0 = 4
 
+    # M0 = 2
+    # K0 = 4
+    # N0 = 2
+    # Rt0 = 2
+    # Ct0 = 2
+
     np_type = np.int8
     allo_type = int8
 
@@ -99,8 +105,6 @@ def test_gemm():
     W_A_cst = np.random.randint(-4, 4, size=(K0, N0)).astype(np_type)
     # W_A_cst = np.array([[1, 1, 1, 1],
     #                    [1, 1, 1, 1]]).astype(np.int8)
-
-    flowtag: bool = True
 
     # =================================================================
     
@@ -116,11 +120,9 @@ def test_gemm():
         systolic[int8, int8, int8, M0, K0, N0, Rt0, Ct0](X, W_A, Z)
         return Z
     
-    # s_uni = allo.customize(systolic_uni, instantiate=[int8, M0, K0, N0, Rt0, Ct0])
-    # s_uni.unfold()
+
     s_top = allo.customize(top, instantiate=[allo_type])
     s_ori = allo.customize(top_ori, instantiate=[allo_type])
-    # s_top.compose(s_uni)
 
     # if Rt0 < 20:
     #     with open(f'systolic_{date}.mlir', 'w') as f:
@@ -131,39 +133,70 @@ def test_gemm():
     
     mod = s_top.build()
 
-    allo_C = mod(X, W_A_cst, flowtag)
-    allo_C_ori = mod(X, W_A_cst, flowtag)
+    ostag: bool = True
+    allo_C_os = mod(X, W_A_cst, ostag)
+    wstag: bool = False
+    allo_C_ws = mod(X, W_A_cst, wstag)
     np_C = X @ W_A_cst
 
     # print(np_C)
     # print(allo_C)
 
-    np.testing.assert_allclose(allo_C, np_C, atol=1e-3)
-    np.testing.assert_allclose(allo_C_ori, np_C, atol=1e-3)
+    np.testing.assert_allclose(allo_C_os, np_C, atol=1e-3)
+    np.testing.assert_allclose(allo_C_ws, np_C, atol=1e-3)
     print("Passed Functionailty Test on CPU!")
 
     # =================================================================
     # # HLS Testing
 
     # ---------------------------------------
-    # Scheduling
-    tile_name = "systolic_tile_uni"
-    systolic_name = "systolic_uni"
-    # s_top.compose(systolic_uni, instantiate=[int8, M0, K0, N0, Rt0, Ct0])
-    # s_top.partition(s_top.R_buf, dim=1)
+    # AST Printing
+    # import inspect
+    # src = inspect.getsource(systolic_uni)
 
-    pe = s_top.unfold(f"{tile_name}:PE", [0, 1])
+    # import ast, astpretty
+    # tree = ast.parse(src)
+    # astpretty.pprint(tree, indent=2, show_offsets=False)
+
+    # ---------------------------------------
+    # Scheduling
+    schedule_name = "parti_pipe"
+
+    s_uni = allo.customize(systolic_uni, instantiate=[int8, M0, K0, N0, Rt0, Ct0])
+
+    tile_name = "systolic_tile_uni"
+    systolic_name = "systolic_uni" # s_uni.top_func_name
+
+    # partition
+    s_uni.partition(s_uni.local_S, dim=0)
+    s_uni.partition(s_uni.R_buf, dim=0)
+    s_uni.partition(s_uni.C_buf, dim=0)
+
+    # pipeline
+    # ini_loop = s_uni.get_loops("systolic_uni")["initial_output"]["n"]
+    ini_loop = s_uni.get_loops("systolic_uni")["row_loop"]["column_loop"]["initial_tile"]["c"]
+    # ini_loop = s_uni.get_loops(s_uni.top_func_name)["initial_tile"]["c"]
+    s_uni.pipeline(ini_loop)
+    temp_loop = s_uni.get_loops(s_uni.top_func_name)["temporal"]["t"]
+    s_uni.pipeline(temp_loop)
+    store_loop = s_uni.get_loops(s_uni.top_func_name)["store_tile"]["c"]
+    s_uni.pipeline(store_loop)
+
+    pe = s_uni.unfold(f"{tile_name}:PE", [0, 1])
     # s_top.to(MockBuffer(systolic_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
     # s_top.to(MockBuffer(systolic_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
 
     # s_top.to(MockBuffer(tile_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
     # s_top.to(MockBuffer(tile_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
 
+    s_top.compose(s_uni)
+
 
     # ---------------------------------------
     # code = s_top.build(target="vhls")
     # if Rt0 < 20:
-    #     with open(f'systolicHLS_{date}.cpp', 'w') as f:
+    #     # with open(f'systolicHLS_{date}.cpp', 'w') as f:
+    #     with open(f'../../testspace/kernel_lib/kernel_{schedule_name}.cpp', 'w') as f:
     #         print(code, file=f)
 
     # ---------------------------------------
@@ -181,18 +214,17 @@ def test_gemm():
     # s_top.dataflow("top")  # important
     
     # if hls.is_available("vitis_hls"):
-    if hls.is_available("vitis_hls"):
-        hls_mod = s_top.build(
-            target="vitis_hls",
-            mode="csim",
-            project=f"gemm_csim_{date}.prj"
-        )
+    #     hls_mod = s_top.build(
+    #         target="vitis_hls",
+    #         mode="csim",
+    #         project=f"gemm_csim_{date}.prj"
+    #     )
 
-        # Be careful about the NumPy type
-        csim_C = np.zeros((M0, N0), dtype=np_type)
-        hls_mod(X, W_A_cst, flowtag, csim_C)
-        np.testing.assert_allclose(csim_C, allo_C, atol=1e-3)
-        print("Passed Functionailty Test on FPGA!")
+    #     # Be careful about the NumPy type
+    #     csim_C = np.zeros((M0, N0), dtype=np_type)
+    #     hls_mod(X, W_A_cst, flowtag, csim_C)
+    #     np.testing.assert_allclose(csim_C, allo_C, atol=1e-3)
+    #     print("Passed Functionailty Test on FPGA!")
 
     return
 
