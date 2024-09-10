@@ -84,13 +84,14 @@ def systolic_uni[
 
     # for ri, ci in dsl.grid(Rtimes, Ctimes, name="outer_tile"):
     for ri in range(Rtimes, name="row_loop"):
+    # for ri in range(Rtimes, name="row_loop"):
         for ci in range(Ctimes, name="column_loop"):
 
         # -------------- Tile Level --------------
-            for r, c in dsl.grid(Rt, Ct, name="initial_tile"):
-                local_S[r, c] = 0 if flowtag else B[ri * Rt + r, ci * Ct + c]
-                R_buf[r, c] = 0 # *
-                C_buf[r, c] = 0 # *
+            for ir, ic in dsl.grid(Rt, Ct, name="initial_tile"):
+                local_S[ir, ic] = 0 if flowtag else B[ri * Rt + ir, ci * Ct + ic]
+                R_buf[ir, ic] = 0 # *
+                C_buf[ir, ic] = 0 # *
 
             for t in range(Tcycles, name="temporal"):
                 # organize the input data shape
@@ -125,13 +126,13 @@ def systolic_uni[
                             C[t-(Rt-1+cd), ci*Ct+cd] = C_buf[Rt, cd]
 
 
-            for r, c in dsl.grid(Rt, Ct, name="store_tile"):
+            for sr, sc in dsl.grid(Rt, Ct, name="store_tile"):
                 # if not flowtag:
                 #     B[ri * Rt + r, ci * Ct + c] = local_S[r, c] # *
                 # else:
                 #     C[ri * Rt + r, ci * Ct + c] = local_S[r, c]
                 if flowtag:
-                    C[ri * Rt + r, ci * Ct + c] = local_S[r, c]
+                    C[ri * Rt + sr, ci * Ct + sc] = local_S[sr, sc]
                 else:
-                    B[ri * Rt + r, ci * Ct + c] = local_S[r, c] # *
+                    B[ri * Rt + sr, ci * Ct + sc] = local_S[sr, sc] # *
                     
