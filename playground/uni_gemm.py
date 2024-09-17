@@ -173,24 +173,25 @@ def test_gemm():
     s_uni.partition(s_uni.C_buf, dim=0)
 
     # pipeline
-    print(s_uni.get_loops(s_uni.top_func_name)["row_loop"])
     ini_loop = s_uni.get_loops(s_uni.top_func_name)["row_loop"]["ic"]
-    # if str(ini_loop.loop.attributes["upper_bound"]) == "affine_map<() -> (1)>":
-    #     ini_loop = s_uni.get_loops(s_uni.top_func_name)["outer_tile"]["ir"]
     s_uni.pipeline(ini_loop)
-    # temp_loop = s_uni.get_loops(s_uni.top_func_name)["row_loop"]["t"]
-    # s_uni.pipeline(temp_loop)
-    # store_loop = s_uni.get_loops(s_uni.top_func_name)["row_loop"]["sc"]
-    # s_uni.pipeline(store_loop)
+    temp_loop = s_uni.get_loops(s_uni.top_func_name)["row_loop"]["t"]
+    s_uni.pipeline(temp_loop)
+    store_loop = s_uni.get_loops(s_uni.top_func_name)["row_loop"]["sc"]
+    s_uni.pipeline(store_loop)
 
+    # unfold
     pe = s_uni.unfold(f"{tile_name}:PE", [0, 1])
-    # s_top.to(MockBuffer(systolic_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
-    # s_top.to(MockBuffer(systolic_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
 
-    # s_top.to(MockBuffer(tile_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
-    # s_top.to(MockBuffer(tile_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
+    # dataflow
+    s_uni.dataflow("column_loop")
 
-    # s_top.compose(s_uni)
+    # fifo
+    s_uni.to(MockBuffer(systolic_name, "R_buf"), pe, axis=0, depth=Ct0 + 1)
+    s_uni.to(MockBuffer(systolic_name, "C_buf"), pe, axis=1, depth=Rt0 + 1)
+
+
+    s_top.compose(s_uni)
 
 
     # ---------------------------------------
